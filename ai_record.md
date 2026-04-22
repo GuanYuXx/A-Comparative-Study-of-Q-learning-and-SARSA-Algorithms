@@ -167,17 +167,46 @@ $env:PYTHONIOENCODING="utf-8"
 
 ---
 
-## 最終交付清單
+### [使用者]
+圖表很快就上去了，y軸幫我取到 -500~0 應該會看得更清晰。另外我覺得 style 的可視化乍看之下無法明顯看出 Q-Learning 跟 SARSA 的差異，希望能改的顯著一點（如箭頭明顯一點等等）。最後要基於 style 圖上畫一個最佳路徑 from S to G。
 
-| 文件 | 位置 | 狀態 |
-|------|------|------|
-| cliff_walking_env.py | 專案根目錄 | ✅ |
-| agents.py | 專案根目錄 | ✅ |
-| main.py | 專案根目錄 | ✅ |
-| startup.sh | 專案根目錄 | ✅ |
-| ending.sh | 專案根目錄 | ✅ |
-| Graph.png | 專案根目錄 | ✅ |
-| style.png | 專案根目錄 | ✅ |
-| Report.md | 專案根目錄 | ✅ |
-| ai_record.md | 專案根目錄 | ✅ (本文件) |
-| GitHub Push | GuanYuXx/A-Comparative-Study-... | ✅ |
+### [AI]
+確認三點修改需求：
+1. **Graph.png** — Y 軸固定 -500 ~ 0（聚焦學習行為的範圍）
+2. **style.png** — 重新設計：Q-Learning 用暖色系（YlOrRd）、SARSA 用冷色系（YlGnBu），以 `ax.annotate` 繪製較大的方向箭頭取代文字符號，視覺對比更顯著
+3. **style.png** — 貪婪式 rollout 取得最佳路徑（S → G），以帶圓點的路徑線疊加在熱力圖上
+
+執行指令：
+```bash
+$env:PYTHONIOENCODING="utf-8"
+& "C:\Users\absol\conda\envs\py3.8\python.exe" main.py
+# 結果: 完全成功 (exit code 0)
+# Q-Learning Final 50-ep avg reward: -60.12
+# SARSA     Final 50-ep avg reward: -25.48
+# [✓] Saved Graph.png
+# [✓] Saved style.png
+
+git add main.py Graph.png style.png
+git commit -m "feat: improved visualizations - Y-axis clip, distinct policy arrows, optimal path overlay"
+git push origin main
+# 結果: 成功推送 (91e5460..d79352d  main -> main)
+```
+
+Report.md 同步更新，新增策略地圖圖例說明表格與最佳路徑比較敘述。
+
+---
+
+## 最終交付清單（更新版）
+
+| 文件 | 位置 | 說明 | 狀態 |
+|------|------|------|------|
+| cliff_walking_env.py | 專案根目錄 | 4×12 Cliff Walking 環境 | ✅ |
+| agents.py | 專案根目錄 | Q-Learning + SARSA (PyTorch CUDA) | ✅ |
+| main.py | 專案根目錄 | 主訓練腳本（崩潰防呆 + 可視化）| ✅ |
+| startup.sh | 專案根目錄 | Openspec 啟動自動化腳本 | ✅ |
+| ending.sh | 專案根目錄 | Openspec 結束自動化腳本 | ✅ |
+| Graph.png | 專案根目錄 | Learning Curve（Y 軸 -500~0）| ✅ |
+| style.png | 專案根目錄 | Policy Map + 最佳路徑疊加 | ✅ |
+| Report.md | 專案根目錄 | 完整分析報告（含圖表說明）| ✅ |
+| ai_record.md | 專案根目錄 | 本 AI 對話紀錄（供手動上傳）| ✅ |
+| GitHub Push | GuanYuXx/A-Comparative-Study-... | 所有程式碼與圖表 | ✅ |
