@@ -36,10 +36,10 @@ STYLE_PATH = "style.png"
 # ─────────────────────────────────────────────
 sns.set_theme(style="darkgrid", palette="muted", font_scale=1.2)
 COLORS = {
-    "qlearning": "#E94560",   # vivid red-pink
-    "sarsa":     "#0F3460",   # deep navy blue
-    "smooth_q":  "#FF8A80",
-    "smooth_s":  "#82B1FF",
+    "qlearning": "#FF4444",   # vivid red
+    "sarsa":     "#00E5FF",   # electric cyan — visible on dark background
+    "smooth_q":  "#FF4444",
+    "smooth_s":  "#00E5FF",
 }
 
 
@@ -159,8 +159,12 @@ def extract_policy_data(agent, env):
     return q_vals, U, V
 
 
-def get_optimal_path(agent, env, max_steps=200):
-    """Greedy rollout from start to goal, returns list of (row, col)."""
+def get_optimal_path(agent, env, max_steps=500):
+    """
+    Greedy rollout from start to goal.
+    Returns list of (row, col) ONLY if the path actually reaches Goal.
+    Returns None if the agent loops or falls off cliff without reaching Goal.
+    """
     env_copy = CliffWalkingEnv()
     state_idx = env_copy.reset()
     path = [env_copy.state]
@@ -169,8 +173,12 @@ def get_optimal_path(agent, env, max_steps=200):
         state_idx, _, done = env_copy.step(best_a)
         path.append(env_copy.state)
         if done:
-            break
-    return path
+            # Only return path if we actually reached the goal (not reset to start)
+            if env_copy.state == env_copy.goal:
+                return path
+            else:
+                return None  # fell into cliff, path invalid
+    return None  # timed out — never reached goal
 
 
 def plot_policy_style(q_agent, s_agent, env, save_path):
@@ -189,79 +197,84 @@ def plot_policy_style(q_agent, s_agent, env, save_path):
     fig.patch.set_facecolor('#0D1117')
 
     for ax, cfg in zip(axes, AGENT_CFG):
-        agent     = cfg["agent"]
+        agent = cfg["agent"]
         q_vals, U, V = extract_policy_data(agent, env)
 
-        # ── Background heatmap ──
+        # ── Background heatmap: use extent so cell(r,c) is centered at (c+0.5, r+0.5) ──
         im = ax.imshow(q_vals, cmap=cfg["cmap"], aspect='auto',
-                       interpolation='nearest', alpha=0.85)
+                       interpolation='nearest', alpha=0.85,
+                       extent=[0, cols, rows, 0])  # left, right, bottom, top
         cbar = fig.colorbar(im, ax=ax, shrink=0.7, pad=0.02)
         cbar.ax.yaxis.set_tick_params(color='lightgray')
         plt.setp(cbar.ax.yaxis.get_ticklabels(), color='lightgray')
         cbar.set_label('Q-value', color='lightgray', fontsize=9)
 
-        # ── Grid lines ──
-        ax.set_xticks(np.arange(-0.5, cols, 1), minor=True)
-        ax.set_yticks(np.arange(-0.5, rows, 1), minor=True)
-        ax.grid(which='minor', color='#333344', linewidth=0.6)
-        ax.tick_params(which='minor', length=0)
+        # ── Grid lines (at integer boundaries, cells are 0~1, 1~2, etc.) ──
+        for x in range(cols + 1):
+            ax.axvline(x, color='#444455', linewidth=0.6, zorder=1)
+        for y in range(rows + 1):
+            ax.axhline(y, color='#444455', linewidth=0.6, zorder=1)
 
-        # ── Quiver arrows (skip cliff & goal) ──
+        # ── WHITE thick arrows centered in each cell (skip cliff & goal & start) ──
         for r in range(rows):
             for c in range(cols):
                 pos = (r, c)
-                if pos in env.cliff or pos == env.goal:
+                if pos in env.cliff or pos == env.goal or pos == env.start:
                     continue
+                cx, cy = c + 0.5, r + 0.5   # cell center
+                dx, dy = U[r, c] * 0.38, -V[r, c] * 0.38  # arrow tip offset
                 ax.annotate("",
-                    xy=(c + 0.5 + U[r, c] * 0.34, r + 0.5 - V[r, c] * 0.34),
-                    xytext=(c + 0.5 - U[r, c] * 0.28, r + 0.5 + V[r, c] * 0.28),
+                    xy=(cx + dx, cy + dy),
+                    xytext=(cx - dx, cy - dy),
                     arrowprops=dict(
                         arrowstyle="-|>",
-                        color=cfg["arrow_color"],
-                        lw=1.8,
-                        mutation_scale=16,
-                    )
+                        color="white",
+                        lw=2.2,
+                        mutation_scale=22,
+                    ),
+                    zorder=4
                 )
 
-        # ── Special cell labels ──
+        # ── Special cell overlays ──
         for r in range(rows):
             for c in range(cols):
                 pos = (r, c)
                 if pos in env.cliff:
                     ax.add_patch(plt.Rectangle((c, r), 1, 1,
-                                               color='#8B0000', alpha=0.7, zorder=2))
+                                               color='#8B0000', alpha=0.85, zorder=2))
                     ax.text(c + 0.5, r + 0.5, 'CLIFF', ha='center', va='center',
                             fontsize=5.5, fontweight='bold', color='white', zorder=3)
                 elif pos == env.start:
                     ax.add_patch(plt.Rectangle((c, r), 1, 1,
-                                               color='#006400', alpha=0.8, zorder=2))
-                    ax.text(c + 0.5, r + 0.5, 'START', ha='center', va='center',
-                            fontsize=7, fontweight='bold', color='lime', zorder=3)
+                                               color='#006400', alpha=0.9, zorder=2))
+                    ax.text(c + 0.5, r + 0.5, 'S', ha='center', va='center',
+                            fontsize=13, fontweight='bold', color='lime', zorder=3)
                 elif pos == env.goal:
                     ax.add_patch(plt.Rectangle((c, r), 1, 1,
-                                               color='#8B6914', alpha=0.8, zorder=2))
-                    ax.text(c + 0.5, r + 0.5, 'GOAL', ha='center', va='center',
-                            fontsize=7, fontweight='bold', color='gold', zorder=3)
+                                               color='#8B6914', alpha=0.9, zorder=2))
+                    ax.text(c + 0.5, r + 0.5, 'G', ha='center', va='center',
+                            fontsize=13, fontweight='bold', color='gold', zorder=3)
 
-        # ── Optimal path overlay ──
+        # ── Optimal path overlay (only if path actually reaches Goal) ──
         opt_path = get_optimal_path(agent, env)
-        if len(opt_path) > 1:
+        if opt_path is not None:
             path_cols = [p[1] + 0.5 for p in opt_path]
             path_rows = [p[0] + 0.5 for p in opt_path]
             ax.plot(path_cols, path_rows,
-                    color=cfg["path_color"], linewidth=3.0, zorder=5,
-                    marker='o', markersize=5, markerfacecolor=cfg["path_color"],
-                    markeredgecolor='white', markeredgewidth=0.8,
-                    label='Optimal Path')
-            # Mark Start & Goal on path
+                    color=cfg["path_color"], linewidth=3.2, zorder=6,
+                    marker='o', markersize=6, markerfacecolor=cfg["path_color"],
+                    markeredgecolor='white', markeredgewidth=1.0)
             ax.plot(path_cols[0],  path_rows[0],  's', color='lime',
-                    markersize=10, zorder=6, markeredgecolor='white', markeredgewidth=1)
+                    markersize=11, zorder=7, markeredgecolor='white', markeredgewidth=1.2)
             ax.plot(path_cols[-1], path_rows[-1], '*', color='gold',
-                    markersize=14, zorder=6, markeredgecolor='white', markeredgewidth=0.8)
+                    markersize=16, zorder=7, markeredgecolor='white', markeredgewidth=1.0)
+            print(f"    [{cfg['title'].split('(')[0].strip()}] Optimal path length: {len(opt_path)} steps")
+        else:
+            print(f"    [{cfg['title'].split('(')[0].strip()}] WARNING: optimal path did not reach Goal — skipping overlay")
 
         # ── Axes style ──
         ax.set_xlim(0, cols)
-        ax.set_ylim(rows, 0)   # top-left origin matches grid
+        ax.set_ylim(rows, 0)
         ax.set_xticks(np.arange(0.5, cols, 1))
         ax.set_yticks(np.arange(0.5, rows, 1))
         ax.set_xticklabels(range(cols), color='lightgray', fontsize=8)
@@ -270,20 +283,21 @@ def plot_policy_style(q_agent, s_agent, env, save_path):
         ax.set_xlabel("Column", color='lightgray', fontsize=10)
         ax.set_ylabel("Row",    color='lightgray', fontsize=10)
         ax.set_facecolor('#0D1117')
-        ax.spines[:].set_color('#333')
+        ax.spines[:].set_color('#555')
 
     # ── Shared legend ──
     legend_elements = [
-        mpatches.Patch(color='#006400', label='Start (S)'),
-        mpatches.Patch(color='#8B6914', label='Goal (G)'),
-        mpatches.Patch(color='#8B0000', label='Cliff (Danger)'),
+        mpatches.Patch(color='#006400', label='S = Start'),
+        mpatches.Patch(color='#8B6914', label='G = Goal'),
+        mpatches.Patch(color='#8B0000', label='Cliff'),
+        plt.Line2D([0], [0], color='white', lw=2, label='White arrow = best action'),
         plt.Line2D([0], [0], color='#FFD700', lw=2.5, marker='o', markersize=5,
                    label='Optimal Path (Q-Learning)'),
         plt.Line2D([0], [0], color='#FFFACD', lw=2.5, marker='o', markersize=5,
-                   linestyle='--', label='Optimal Path (SARSA)'),
+                   label='Optimal Path (SARSA)'),
     ]
-    fig.legend(handles=legend_elements, loc='lower center', ncol=5,
-               facecolor='#161B22', edgecolor='#444', labelcolor='white', fontsize=10,
+    fig.legend(handles=legend_elements, loc='lower center', ncol=6,
+               facecolor='#161B22', edgecolor='#444', labelcolor='white', fontsize=9,
                bbox_to_anchor=(0.5, -0.08))
 
     fig.suptitle("Learned Policy Maps & Optimal Paths — Q-Learning vs SARSA",
