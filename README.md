@@ -263,7 +263,3 @@ python main.py
 ```
 
 **Requirements:** `numpy`, `matplotlib`, `seaborn`, `torch` (CUDA 12.1)
-
----
-
-*Generated with [Antigravity AI](https://antigravity.dev) · PyTorch 2.4.1 · CUDA 12.1*
