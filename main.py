@@ -28,8 +28,9 @@ EPSILON        = 0.1
 SMOOTH_WINDOW  = 20   # Rolling average window for learning curve
 
 # Output paths
-GRAPH_PATH = "Graph.png"
-STYLE_PATH = "style.png"
+GRAPH_PATH        = "Graph.png"
+STYLE_POLICY_PATH = "style_policy.png"   # Fig 1: policy direction arrows
+STYLE_PATH_PATH   = "style_path.png"     # Fig 2: optimal path on clean grid
 
 # ─────────────────────────────────────────────
 # Seaborn / Matplotlib global style
@@ -110,9 +111,9 @@ def plot_learning_curve(q_rewards, s_rewards, smooth_window, save_path):
     ax.plot(smooth_x, smooth_q, color=COLORS["qlearning"], linewidth=2.5, label=f"Q-Learning (smoothed, w={smooth_window})")
     ax.plot(smooth_x, smooth_s, color=COLORS["sarsa"],     linewidth=2.5, linestyle='--', label=f"SARSA (smoothed, w={smooth_window})")
 
-    # ── Fix Y-axis to -500 ~ 0 for clear comparison ──
-    ax.set_ylim(-500, 0)
-    ax.set_yticks(range(-500, 1, 50))
+    # ── Fix Y-axis to -300 ~ 0 ──
+    ax.set_ylim(-300, 0)
+    ax.set_yticks(range(-300, 1, 25))
 
     ax.set_title("Q-Learning vs SARSA — Learning Curve\n(Cliff Walking, 4×12 Grid)", color='white', fontsize=15, fontweight='bold', pad=14)
     ax.set_xlabel("Episode", color='white', fontsize=12)
@@ -310,6 +311,191 @@ def plot_policy_style(q_agent, s_agent, env, save_path):
 
 
 # ─────────────────────────────────────────────
+# Fig 1: Policy Direction Map  (style_policy.png)
+# White background, bold arrow per cell, no gradient
+# ─────────────────────────────────────────────
+
+ARROW_CHARS = {0: '^', 1: 'v', 2: '<', 3: '>'}   # ASCII fallback
+
+
+def _draw_policy_grid(ax, agent, env, title):
+    """Draw one policy grid panel on the given axes (white background, bold arrows)."""
+    rows, cols = env.get_grid_shape()
+    ax.set_facecolor('white')
+    ax.set_xlim(0, cols)
+    ax.set_ylim(rows, 0)   # row 0 at top
+
+    # ── Fill special cells first ──
+    for r in range(rows):
+        for c in range(cols):
+            pos = (r, c)
+            if pos in env.cliff:
+                ax.add_patch(plt.Rectangle((c, r), 1, 1,
+                             color='#AED6F1', zorder=1))   # light blue cliff
+
+    # ── Grid lines (drawn after fill so they sit on top) ──
+    for x in range(cols + 1):
+        ax.axvline(x, color='black', linewidth=1.2, zorder=2)
+    for y in range(rows + 1):
+        ax.axhline(y, color='black', linewidth=1.2, zorder=2)
+
+    # ── Cell content ──
+    for r in range(rows):
+        for c in range(cols):
+            pos = (r, c)
+            cx, cy = c + 0.5, r + 0.5
+            if pos in env.cliff:
+                # Label only at the center column of cliff
+                if c == (env.cols // 2):
+                    ax.text(cx, cy, 'Cliff', ha='center', va='center',
+                            fontsize=9, color='#1A5276', fontweight='bold', zorder=3)
+            elif pos == env.start:
+                ax.text(cx, cy, 'S', ha='center', va='center',
+                        fontsize=13, color='black', fontweight='bold', zorder=3)
+            elif pos == env.goal:
+                ax.text(cx, cy, 'G', ha='center', va='center',
+                        fontsize=13, color='black', fontweight='bold', zorder=3)
+            else:
+                state = r * cols + c
+                best_a = agent.get_best_action(state)
+                # Use matplotlib arrow annotation centered in cell
+                u = ACTION_DC[best_a]
+                v = -ACTION_DR[best_a]   # flip: imshow row-down = positive y-down
+                ax.annotate("",
+                    xy     =(cx + u * 0.30, cy - v * 0.30),
+                    xytext =(cx - u * 0.30, cy + v * 0.30),
+                    arrowprops=dict(
+                        arrowstyle="-|>",
+                        color='black',
+                        lw=2.2,
+                        mutation_scale=20,
+                    ),
+                    zorder=4
+                )
+
+    # ── Axes cosmetics ──
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_title(title, fontsize=12, fontweight='bold', color='black', pad=8)
+    for spine in ax.spines.values():
+        spine.set_color('black')
+        spine.set_linewidth(1.5)
+
+
+def plot_policy_arrows(q_agent, s_agent, env, save_path):
+    """Save style_policy.png: 1x2 subplots of policy direction maps."""
+    fig, axes = plt.subplots(1, 2, figsize=(20, 5))
+    fig.patch.set_facecolor('white')
+    _draw_policy_grid(axes[0], q_agent, env, "Q-Learning Policy  (Off-policy)")
+    _draw_policy_grid(axes[1], s_agent, env, "SARSA Policy  (On-policy)")
+    fig.suptitle("Learned Policy Maps — Q-Learning vs SARSA",
+                 fontsize=14, fontweight='bold', color='black', y=1.01)
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=150, bbox_inches='tight', facecolor='white')
+    plt.close()
+    print(f"[✓] Saved policy map → {save_path}")
+
+
+# ─────────────────────────────────────────────
+# Fig 2: Optimal Path Map  (style_path.png)
+# White background, no gradient, path overlay only
+# ─────────────────────────────────────────────
+
+def _draw_path_grid(ax, agent, env, title, path_color):
+    """Draw one path-grid panel: plain white grid, cliff shaded, path overlaid."""
+    rows, cols = env.get_grid_shape()
+    ax.set_facecolor('white')
+    ax.set_xlim(0, cols)
+    ax.set_ylim(rows, 0)
+
+    # ── Cliff shading ──
+    for r in range(rows):
+        for c in range(cols):
+            if (r, c) in env.cliff:
+                ax.add_patch(plt.Rectangle((c, r), 1, 1,
+                             color='#AED6F1', zorder=1))
+
+    # ── Grid lines ──
+    for x in range(cols + 1):
+        ax.axvline(x, color='black', linewidth=1.0, zorder=2)
+    for y in range(rows + 1):
+        ax.axhline(y, color='black', linewidth=1.0, zorder=2)
+
+    # ── Cell labels: S, G, Cliff ──
+    for r in range(rows):
+        for c in range(cols):
+            pos = (r, c)
+            cx, cy = c + 0.5, r + 0.5
+            if pos == env.start:
+                ax.text(cx, cy, 'S', ha='center', va='center',
+                        fontsize=13, fontweight='bold', color='black', zorder=5)
+            elif pos == env.goal:
+                ax.text(cx, cy, 'G', ha='center', va='center',
+                        fontsize=13, fontweight='bold', color='black', zorder=5)
+            elif pos in env.cliff and c == (env.cols // 2):
+                ax.text(cx, cy, 'Cliff', ha='center', va='center',
+                        fontsize=9, color='#1A5276', fontweight='bold', zorder=3)
+
+    # ── Optimal path ──
+    opt_path = get_optimal_path(agent, env)
+    if opt_path is not None:
+        px = [p[1] + 0.5 for p in opt_path]
+        py = [p[0] + 0.5 for p in opt_path]
+        ax.plot(px, py, color=path_color, linewidth=3.0, zorder=6,
+                marker='o', markersize=7,
+                markerfacecolor=path_color, markeredgecolor='black', markeredgewidth=1)
+        # Start square & Goal star
+        ax.plot(px[0],  py[0],  's', color='limegreen',
+                markersize=12, zorder=7, markeredgecolor='black', markeredgewidth=1.2)
+        ax.plot(px[-1], py[-1], '*', color='gold',
+                markersize=18, zorder=7, markeredgecolor='black', markeredgewidth=0.8)
+        print(f"    [{title}] path: {len(opt_path)} steps")
+    else:
+        ax.text(cols / 2, rows / 2, 'No path found', ha='center', va='center',
+                fontsize=12, color='red')
+        print(f"    [{title}] WARNING: path did not reach Goal")
+
+    # ── Axes cosmetics ──
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_title(title, fontsize=12, fontweight='bold', color='black', pad=8)
+    for spine in ax.spines.values():
+        spine.set_color('black')
+        spine.set_linewidth(1.5)
+
+
+def plot_optimal_paths(q_agent, s_agent, env, save_path):
+    """Save style_path.png: 1x2 subplots, white grid with path overlay."""
+    fig, axes = plt.subplots(1, 2, figsize=(20, 5))
+    fig.patch.set_facecolor('white')
+    _draw_path_grid(axes[0], q_agent, env,
+                    "Q-Learning  (Off-policy)", path_color='#E53935')   # red path
+    _draw_path_grid(axes[1], s_agent, env,
+                    "SARSA  (On-policy)",       path_color='#1565C0')   # blue path
+
+    # ── Legend ──
+    legend_elements = [
+        mpatches.Patch(color='#AED6F1', label='Cliff area'),
+        plt.Line2D([0], [0], color='#E53935', lw=2.5, marker='o', markersize=6,
+                   label='Optimal Path (Q-Learning)'),
+        plt.Line2D([0], [0], color='#1565C0', lw=2.5, marker='o', markersize=6,
+                   label='Optimal Path (SARSA)'),
+        plt.Line2D([0], [0], marker='s', color='w', markerfacecolor='limegreen',
+                   markersize=10, markeredgecolor='black', label='S = Start'),
+        plt.Line2D([0], [0], marker='*', color='w', markerfacecolor='gold',
+                   markersize=14, markeredgecolor='black', label='G = Goal'),
+    ]
+    fig.legend(handles=legend_elements, loc='lower center', ncol=5,
+               facecolor='white', edgecolor='#ccc', labelcolor='black', fontsize=10,
+               bbox_to_anchor=(0.5, -0.1))
+    fig.suptitle("Optimal Paths — Q-Learning vs SARSA  (Cliff Walking 4x12)",
+                 fontsize=14, fontweight='bold', color='black', y=1.01)
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=150, bbox_inches='tight', facecolor='white')
+    plt.close()
+    print(f"[✓] Saved path map → {save_path}")
+
+# ─────────────────────────────────────────────
 # Main Execution with Crash Guard
 # ─────────────────────────────────────────────
 
@@ -339,11 +525,15 @@ def main():
     # ── Plot ──
     print("\n[Plotting] Generating visualizations...")
     plot_learning_curve(q_rewards, s_rewards, SMOOTH_WINDOW, GRAPH_PATH)
-    plot_policy_style(q_agent, s_agent, env, STYLE_PATH)
+    print("[Plotting] style_policy.png — policy direction maps...")
+    plot_policy_arrows(q_agent, s_agent, env, STYLE_POLICY_PATH)
+    print("[Plotting] style_path.png — optimal path maps...")
+    plot_optimal_paths(q_agent, s_agent, env, STYLE_PATH_PATH)
 
-    print("\n✅ All done! Results saved to:")
-    print(f"   • {GRAPH_PATH}")
-    print(f"   • {STYLE_PATH}")
+    print("\nAll done! Results saved to:")
+    print(f"   - {GRAPH_PATH}")
+    print(f"   - {STYLE_POLICY_PATH}")
+    print(f"   - {STYLE_PATH_PATH}")
 
     return q_rewards, s_rewards, q_agent, s_agent
 
