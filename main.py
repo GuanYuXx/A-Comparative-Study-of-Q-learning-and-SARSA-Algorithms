@@ -453,7 +453,7 @@ def _draw_path_grid(ax, agent, env, title, path_color):
     for y in range(rows + 1):
         ax.axhline(y, color='black', linewidth=1.0, zorder=2)
 
-    # ── Cell labels: S, G, Cliff ──
+    # ── Cell labels and best-action arrows ──
     for r in range(rows):
         for c in range(cols):
             pos = (r, c)
@@ -465,9 +465,22 @@ def _draw_path_grid(ax, agent, env, title, path_color):
             elif pos == env.goal:
                 ax.text(cx, cy, 'G', ha='center', va='center',
                         fontsize=13, fontweight='bold', color='black', zorder=5)
-            elif pos in env.cliff and c == (env.cols // 2):
-                ax.text(cx, cy, 'Cliff', ha='center', va='center',
-                        fontsize=9, color='#1A5276', fontweight='bold', zorder=3)
+            elif pos in env.cliff:
+                if c == (env.cols // 2):
+                    ax.text(cx, cy, 'Cliff', ha='center', va='center',
+                            fontsize=9, color='#1A5276', fontweight='bold', zorder=3)
+            else:
+                state = r * cols + c
+                best_a = agent.get_best_action(state)
+                u = ACTION_DC[best_a]
+                v = -ACTION_DR[best_a]
+                ax.annotate("",
+                    xy    =(cx + u * 0.22, cy - v * 0.22),
+                    xytext=(cx - u * 0.22, cy + v * 0.22),
+                    arrowprops=dict(arrowstyle="-|>", color='black',
+                                    lw=1.8, mutation_scale=16),
+                    zorder=4
+                )
 
     # ── Optimal path overlay ──
     opt_path = get_optimal_path(agent, env)
