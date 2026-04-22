@@ -239,6 +239,34 @@ git push origin main
 
 ---
 
+### [使用者]
+抱歉我還有幾個小請求：
+policy幫我只顯示path的箭頭的機率數字(不要路徑)
+path 把原本的機率數字拿掉 自己不要顯示(但還是要路徑)
+
+### [AI]
+沒問題，這就將兩張圖的元素對調，讓它們更符合您的表達需求！
+1. **style_policy.png**：改為顯示每個格子的「最佳動作黑箭頭 + 4 方向機率數字（最大機率標紅字）」，並移除路徑疊加線條，讓這張圖純粹展現策略與機率分佈。
+2. **style_path.png**：移除機率數字與原本格子上的箭頭，僅保留最單純乾淨的網格以及疊加上去的最佳路徑（紅線/藍線），讓視覺焦點全集中在走法上！
+
+執行指令並產生新圖：
+```bash
+$env:PYTHONIOENCODING="utf-8"
+& "C:\Users\absol\conda\envs\py3.8\python.exe" main.py
+# Q-Learning Final 50-ep avg reward: -35.34
+# SARSA     Final 50-ep avg reward: -20.14
+# [✓] Saved Graph.png
+# [✓] Saved policy map → style_policy.png
+# [✓] Saved path map → style_path.png
+# Exit code: 0
+
+git add .
+git commit -m "feat: swap probabilities and path overlay between policy map and path map"
+git push origin main
+```
+
+---
+
 ## 最終交付清單（最終版）
 
 | 文件 | 位置 | 說明 | 狀態 |
@@ -249,8 +277,8 @@ git push origin main
 | startup.sh | 專案根目錄 | Openspec 啟動自動化腳本 | ✅ |
 | ending.sh | 專案根目錄 | Openspec 結束自動化腳本 | ✅ |
 | Graph.png | 專案根目錄 | Learning Curve（Y 軸 -300~0）| ✅ |
-| style_policy.png | 專案根目錄 | Policy 方向圖 + 小路徑線疊加 | ✅ |
-| style_path.png | 專案根目錄 | 白底路徑圖 + softmax 機率標籤 | ✅ |
-| Report.md | 專案根目錄 | 完整分析報告 | ✅ |
+| style_policy.png | 專案根目錄 | 策略圖（機率標籤＋最佳箭頭，無路徑）| ✅ |
+| style_path.png | 專案根目錄 | 路徑圖（僅乾淨網格＋最佳路徑線） | ✅ |
+| README.md | 專案根目錄 | 完整分析與架構報告 | ✅ |
 | ai_record.md | 專案根目錄 | 本 AI 對話紀錄（供手動上傳）| ✅ |
-| GitHub Push | GuanYuXx/A-Comparative-Study-... | 所有程式碼與圖表（共 8 次 commit）| ✅ |
+| GitHub Push | GuanYuXx/A-Comparative-Study-... | 所有程式碼與最新圖表 | ✅ |
