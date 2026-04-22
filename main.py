@@ -318,8 +318,8 @@ def plot_policy_style(q_agent, s_agent, env, save_path):
 ARROW_CHARS = {0: '^', 1: 'v', 2: '<', 3: '>'}   # ASCII fallback
 
 
-def _draw_policy_grid(ax, agent, env, title):
-    """Draw one policy grid panel on the given axes (white background, bold arrows)."""
+def _draw_policy_grid(ax, agent, env, title, path_color):
+    """Draw one policy grid panel: white bg, bold arrows, small path overlay."""
     rows, cols = env.get_grid_shape()
     ax.set_facecolor('white')
     ax.set_xlim(0, cols)
@@ -328,24 +328,22 @@ def _draw_policy_grid(ax, agent, env, title):
     # ── Fill special cells first ──
     for r in range(rows):
         for c in range(cols):
-            pos = (r, c)
-            if pos in env.cliff:
+            if (r, c) in env.cliff:
                 ax.add_patch(plt.Rectangle((c, r), 1, 1,
-                             color='#AED6F1', zorder=1))   # light blue cliff
+                             color='#AED6F1', zorder=1))
 
-    # ── Grid lines (drawn after fill so they sit on top) ──
+    # ── Grid lines ──
     for x in range(cols + 1):
         ax.axvline(x, color='black', linewidth=1.2, zorder=2)
     for y in range(rows + 1):
         ax.axhline(y, color='black', linewidth=1.2, zorder=2)
 
-    # ── Cell content ──
+    # ── Cell content: big policy arrows ──
     for r in range(rows):
         for c in range(cols):
             pos = (r, c)
             cx, cy = c + 0.5, r + 0.5
             if pos in env.cliff:
-                # Label only at the center column of cliff
                 if c == (env.cols // 2):
                     ax.text(cx, cy, 'Cliff', ha='center', va='center',
                             fontsize=9, color='#1A5276', fontweight='bold', zorder=3)
@@ -358,20 +356,29 @@ def _draw_policy_grid(ax, agent, env, title):
             else:
                 state = r * cols + c
                 best_a = agent.get_best_action(state)
-                # Use matplotlib arrow annotation centered in cell
                 u = ACTION_DC[best_a]
-                v = -ACTION_DR[best_a]   # flip: imshow row-down = positive y-down
+                v = -ACTION_DR[best_a]
                 ax.annotate("",
-                    xy     =(cx + u * 0.30, cy - v * 0.30),
-                    xytext =(cx - u * 0.30, cy + v * 0.30),
-                    arrowprops=dict(
-                        arrowstyle="-|>",
-                        color='black',
-                        lw=2.2,
-                        mutation_scale=20,
-                    ),
+                    xy    =(cx + u * 0.30, cy - v * 0.30),
+                    xytext=(cx - u * 0.30, cy + v * 0.30),
+                    arrowprops=dict(arrowstyle="-|>", color='black',
+                                   lw=2.2, mutation_scale=20),
                     zorder=4
                 )
+
+    # ── Optimal path overlay (smaller, colored) ──
+    opt_path = get_optimal_path(agent, env)
+    if opt_path is not None:
+        px = [p[1] + 0.5 for p in opt_path]
+        py = [p[0] + 0.5 for p in opt_path]
+        ax.plot(px, py, color=path_color, linewidth=2.0, zorder=6,
+                marker='o', markersize=4,
+                markerfacecolor=path_color, markeredgecolor='white',
+                markeredgewidth=0.6, alpha=0.85)
+        ax.plot(px[0],  py[0],  's', color='limegreen',
+                markersize=8, zorder=7, markeredgecolor='black', markeredgewidth=1.0)
+        ax.plot(px[-1], py[-1], '*', color='gold',
+                markersize=12, zorder=7, markeredgecolor='black', markeredgewidth=0.6)
 
     # ── Axes cosmetics ──
     ax.set_xticks([])
@@ -386,8 +393,26 @@ def plot_policy_arrows(q_agent, s_agent, env, save_path):
     """Save style_policy.png: 1x2 subplots of policy direction maps."""
     fig, axes = plt.subplots(1, 2, figsize=(20, 5))
     fig.patch.set_facecolor('white')
-    _draw_policy_grid(axes[0], q_agent, env, "Q-Learning Policy  (Off-policy)")
-    _draw_policy_grid(axes[1], s_agent, env, "SARSA Policy  (On-policy)")
+    _draw_policy_grid(axes[0], q_agent, env,
+                      "Q-Learning Policy  (Off-policy)", path_color='#E53935')
+    _draw_policy_grid(axes[1], s_agent, env,
+                      "SARSA Policy  (On-policy)",       path_color='#1565C0')
+
+    # ── Legend for the path overlay ──
+    legend_elements = [
+        plt.Line2D([0], [0], color='#E53935', lw=2, marker='o', markersize=5,
+                   label='Optimal Path (Q-Learning)'),
+        plt.Line2D([0], [0], color='#1565C0', lw=2, marker='o', markersize=5,
+                   label='Optimal Path (SARSA)'),
+        plt.Line2D([0], [0], marker='s', color='w', markerfacecolor='limegreen',
+                   markersize=8, markeredgecolor='black', label='S = Start'),
+        plt.Line2D([0], [0], marker='*', color='w', markerfacecolor='gold',
+                   markersize=11, markeredgecolor='black', label='G = Goal'),
+    ]
+    fig.legend(handles=legend_elements, loc='lower center', ncol=4,
+               facecolor='white', edgecolor='#ccc', labelcolor='black', fontsize=10,
+               bbox_to_anchor=(0.5, -0.08))
+
     fig.suptitle("Learned Policy Maps — Q-Learning vs SARSA",
                  fontsize=14, fontweight='bold', color='black', y=1.01)
     plt.tight_layout()
@@ -402,7 +427,8 @@ def plot_policy_arrows(q_agent, s_agent, env, save_path):
 # ─────────────────────────────────────────────
 
 def _draw_path_grid(ax, agent, env, title, path_color):
-    """Draw one path-grid panel: plain white grid, cliff shaded, path overlaid."""
+    """Draw one path-grid panel: plain white grid, cliff shaded,
+       softmax probability labels per cell, path overlaid."""
     rows, cols = env.get_grid_shape()
     ax.set_facecolor('white')
     ax.set_xlim(0, cols)
@@ -421,34 +447,73 @@ def _draw_path_grid(ax, agent, env, title, path_color):
     for y in range(rows + 1):
         ax.axhline(y, color='black', linewidth=1.0, zorder=2)
 
-    # ── Cell labels: S, G, Cliff ──
+    # ── Per-cell: softmax probability labels + best-action arrow ──
+    # Softmax of Q-values gives relative probability of each direction
+    # Label positions (dx, dy from cell center): up, down, left, right
+    PROB_OFFSET = {
+        0: ( 0.0, -0.28),   # up
+        1: ( 0.0,  0.28),   # down
+        2: (-0.30,  0.0),   # left
+        3: ( 0.30,  0.0),   # right
+    }
+
     for r in range(rows):
         for c in range(cols):
             pos = (r, c)
             cx, cy = c + 0.5, r + 0.5
+
             if pos == env.start:
                 ax.text(cx, cy, 'S', ha='center', va='center',
                         fontsize=13, fontweight='bold', color='black', zorder=5)
-            elif pos == env.goal:
+                continue
+            if pos == env.goal:
                 ax.text(cx, cy, 'G', ha='center', va='center',
                         fontsize=13, fontweight='bold', color='black', zorder=5)
-            elif pos in env.cliff and c == (env.cols // 2):
-                ax.text(cx, cy, 'Cliff', ha='center', va='center',
-                        fontsize=9, color='#1A5276', fontweight='bold', zorder=3)
+                continue
+            if pos in env.cliff:
+                if c == (env.cols // 2):
+                    ax.text(cx, cy, 'Cliff', ha='center', va='center',
+                            fontsize=9, color='#1A5276', fontweight='bold', zorder=3)
+                continue
 
-    # ── Optimal path ──
+            state = r * cols + c
+            q_row  = agent.Q[state].cpu().float()
+            probs  = torch.softmax(q_row, dim=0).numpy()   # shape (4,)
+            best_a = int(q_row.argmax().item())
+
+            # ── Probability labels (tiny text at 4 compass positions) ──
+            prob_color = ['#888888', '#888888', '#888888', '#888888']
+            prob_color[best_a] = '#C62828'   # highlight greedy action probability in red
+            for a in range(4):
+                dx, dy = PROB_OFFSET[a]
+                ax.text(cx + dx, cy + dy, f'{probs[a]:.2f}',
+                        ha='center', va='center', fontsize=5.5,
+                        color=prob_color[a], zorder=4)
+
+            # ── Best-action arrow (prominent, black) ──
+            u = ACTION_DC[best_a]
+            v = -ACTION_DR[best_a]
+            ax.annotate("",
+                xy    =(cx + u * 0.22, cy - v * 0.22),
+                xytext=(cx - u * 0.22, cy + v * 0.22),
+                arrowprops=dict(arrowstyle="-|>", color='black',
+                                lw=1.8, mutation_scale=16),
+                zorder=5
+            )
+
+    # ── Optimal path overlay ──
     opt_path = get_optimal_path(agent, env)
     if opt_path is not None:
         px = [p[1] + 0.5 for p in opt_path]
         py = [p[0] + 0.5 for p in opt_path]
-        ax.plot(px, py, color=path_color, linewidth=3.0, zorder=6,
-                marker='o', markersize=7,
-                markerfacecolor=path_color, markeredgecolor='black', markeredgewidth=1)
-        # Start square & Goal star
+        ax.plot(px, py, color=path_color, linewidth=2.8, zorder=6,
+                marker='o', markersize=6,
+                markerfacecolor=path_color, markeredgecolor='black',
+                markeredgewidth=0.8, alpha=0.85)
         ax.plot(px[0],  py[0],  's', color='limegreen',
-                markersize=12, zorder=7, markeredgecolor='black', markeredgewidth=1.2)
+                markersize=11, zorder=7, markeredgecolor='black', markeredgewidth=1.2)
         ax.plot(px[-1], py[-1], '*', color='gold',
-                markersize=18, zorder=7, markeredgecolor='black', markeredgewidth=0.8)
+                markersize=16, zorder=7, markeredgecolor='black', markeredgewidth=0.8)
         print(f"    [{title}] path: {len(opt_path)} steps")
     else:
         ax.text(cols / 2, rows / 2, 'No path found', ha='center', va='center',
